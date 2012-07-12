@@ -14,6 +14,13 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
+    case application:get_env(egeoip, reload_interval) of
+        {ok, Interval} ->
+            timer:apply_interval(Interval*1000, egeoip, reload, []);
+        _ -> 
+            undefined
+    end,
+
     File = case application:get_env(egeoip, dbfile) of
 	       {ok, Other} ->
 		   Other;
