@@ -27,3 +27,12 @@ build-plt:
 dialyzer:
 	$(REBAR) dialyze $(REBAR_FLAGS)
 
+tag:
+	@echo "Current version: $(TAG)" > DOC/CHANGELOG
+	@git log --decorate  |\
+         grep -E '(^ +(DOC|FIX|OPT|CHANGE|NEW|SEC|CHANGE|PERF))|tag:' |\
+         sed 's/commit [0-9a-f]* (.*tag: \([0-9.]*\).*).*/\ntag: \1/'\
+         >> DOC/CHANGELOG
+	@git add DOC/CHANGELOG
+	@git commit -m "--" DOC/CHANGELOG
+	@git tag $(TAG)
