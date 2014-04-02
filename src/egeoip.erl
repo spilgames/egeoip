@@ -33,6 +33,11 @@
 
 -include("egeoip.hrl").
 
+%% exports for tests
+-ifdef(TEST).
+-export([address_fast/3]).
+-endif.
+
 %% geoip record API
 
 %% @type geoip_atom() = country_code | country_code3 | country_name |
@@ -233,6 +238,8 @@ new() ->
 
 %% @spec new(Path) -> {ok, geoipdb()}
 %% @doc Create a new geoipdb database record using the database at Path.
+new(country) ->
+    new(default_db(["GeoIP.dat", "GeoIPCity.dat", "GeoLiteCity.dat"]));
 new(city) ->
     new(default_db(["GeoIPCity.dat", "GeoLiteCity.dat"]));
 new(Path) ->
@@ -244,7 +251,7 @@ new(Path) ->
             ok = check_state(State),
             {ok, State};
         false ->
-	    {error, {geoip_db_not_found,Path}}
+            {error, {geoip_db_not_found,Path}}
     end.
 
 %% @spec lookup(D::geoipdb(), Addr) -> {ok, geoip()}
@@ -263,8 +270,8 @@ default_db([Path | Rest]) ->
             DbPath
     end.
 
-address_fast([N2, N1, N0, $. | Rest], Num, Shift) when Shift >= 8 ->
-    case list_to_integer([N2, N1, N0]) of
+address_fast([N0, $. | Rest], Num, Shift) when Shift >= 8 ->
+    case N0 - $0 of
         N when N =< 255 ->
             address_fast(Rest, Num bor (N bsl Shift), Shift - 8)
     end;
@@ -273,8 +280,8 @@ address_fast([N1, N0, $. | Rest], Num, Shift) when Shift >= 8 ->
         N when N =< 255 ->
             address_fast(Rest, Num bor (N bsl Shift), Shift - 8)
     end;
-address_fast([N0, $. | Rest], Num, Shift) when Shift >= 8 ->
-    case N0 - $0 of
+address_fast([N2, N1, N0, $. | Rest], Num, Shift) when Shift >= 8 ->
+    case list_to_integer([N2, N1, N0]) of
         N when N =< 255 ->
             address_fast(Rest, Num bor (N bsl Shift), Shift - 8)
     end;
@@ -292,7 +299,9 @@ address_fast([N0], Num, 0) ->
     case N0 - $0 of
         N when N =< 255 ->
             Num bor N
-    end.
+    end;
+address_fast(_N, _Num, _X) ->
+    invalid_fast_address.
 
 %% @spec ip2long(Address) -> {ok, integer()}
 %% @doc Convert an IP address from a string, IPv4 tuple or IPv6 tuple to the
@@ -300,7 +309,7 @@ address_fast([N0], Num, 0) ->
 ip2long(Address) when is_integer(Address) ->
     {ok, Address};
 ip2long(Address) when is_list(Address) ->
-    case catch address_fast(Address, 0, 24) of
+    case address_fast(Address, 0, 24) of
         N when is_integer(N) ->
             {ok, N};
         _ ->
@@ -326,6 +335,10 @@ ip2long(_) ->
 lookup_record(D, Ip) ->
     get_record(D, seek_country(D, Ip)).
 
+read_structures(Path, Data, _Seek, 0) ->
+    #geoipdb{segments = ?GEOIP_COUNTRY_BEGIN,
+             data = Data,
+             filename = Path};
 read_structures(Path, Data, Seek, N) when N > 0 ->
     <<_:Seek/binary, Delim:3/binary, _/binary>> = Data,
     case Delim of
@@ -370,6 +383,14 @@ read_structures(Path, Data, Seek, N) when N > 0 ->
 
 get_record(D, SeekCountry) when D#geoipdb.segments =:= SeekCountry ->
     #geoip{};
+get_record(D=#geoipdb{type=?GEOIP_COUNTRY_EDITION}, SeekCountry) ->
+  CountryNum = SeekCountry - ?GEOIP_COUNTRY_BEGIN,
+  Country = country_code(D, CountryNum),
+  Country3 = country_code3(D, CountryNum),
+  CountryName = country_name(D, CountryNum),
+  #geoip{country_code = Country,
+           country_code3 = Country3,
+           country_name = CountryName};
 get_record(D=#geoipdb{record_length = Length,
                       segments = Segments,
                       data = Data,
