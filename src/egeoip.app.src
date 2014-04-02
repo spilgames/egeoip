@@ -1,6 +1,6 @@
 {application,egeoip,
  [{description,"geolocation by IP"},
-  {vsn,"1.1"},
+  {vsn,git},
   {modules,[]},
   {registered, []},
   {env, [{dbfile, city}]},
